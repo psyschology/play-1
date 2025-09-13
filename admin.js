@@ -4,15 +4,15 @@ import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut } from
 import { getDatabase, ref, onValue, set, update, remove } from "https://www.gstatic.com/firebasejs/9.15.0/firebase-database.js";
 
 // --- START: PASTE YOUR FIREBASE CONFIGURATION HERE ---
-const firebaseConfig = {
-  apiKey: "YOUR_API_KEY",
-  authDomain: "YOUR_AUTH_DOMAIN",
-  databaseURL: "YOUR_DATABASE_URL",
-  projectId: "YOUR_PROJECT_ID",
-  storageBucket: "YOUR_STORAGE_BUCKET",
-  messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
-  appId: "YOUR_APP_ID"
-};
+ const firebaseConfig = {
+    apiKey: "AIzaSyBZ9VKH0SVMOYdvYOO_XY_ycjB0C1ty_BU",
+    authDomain: "play-2b9e2.firebaseapp.com",
+    projectId: "play-2b9e2",
+    storageBucket: "play-2b9e2.firebasestorage.app",
+    messagingSenderId: "717502298791",
+    appId: "1:717502298791:web:a170ed9239e5df21987982",
+    measurementId: "G-97HGFBY9QJ"
+  };
 // --- END: PASTE YOUR FIREBASE CONFIGURATION HERE ---
 
 // Initialize Firebase
