@@ -195,13 +195,13 @@ function generateAndSaveTickets(limit) {
     if (!limit || limit <= 0) return alert("Please enter a valid ticket limit.");
     
     const tickets = {};
-    const generatedRows = new Set(); 
+    // const generatedRows = new Set();  <- This is no longer needed
 
     for (let i = 1; i <= limit; i++) {
         tickets[`ticket_${i}`] = {
             ticketNumber: i,
             owner: 'Unbooked',
-            numbers: generateTambolaTicket(generatedRows)
+            numbers: generateTambolaTicket() // Pass no arguments
         };
     }
     
@@ -209,77 +209,75 @@ function generateAndSaveTickets(limit) {
     alert(`${limit} unique tickets generated successfully!`);
 }
 
-function generateTambolaTicket(generatedRows) {
-    let ticket;
-    let isUnique = false;
-    let attempts = 0;
+function generateTambolaTicket() {
+    // This function uses a while loop to ensure it produces a valid ticket 
+    // that meets all Tambola rules before returning.
+    while (true) {
+        const ticket = Array(3).fill(null).map(() => Array(9).fill(null));
 
-    while(!isUnique && attempts < 100) { // Safety break
-        ticket = Array(3).fill(null).map(() => Array(9).fill(null));
-        
-        // Step 1: Determine number of elements per column (1, 2, or 3)
-        let colCounts = [1,1,1,1,1,1,1,1,1]; // 9 numbers
-        for (let i = 0; i < 6; i++) { // Distribute remaining 6 numbers
-            let col;
-            do {
-                col = Math.floor(Math.random() * 9);
-            } while (colCounts[col] >= 3);
-            colCounts[col]++;
-        }
-
-        // Step 2: Determine which rows get numbers in each column
-        let rowCounts = [0,0,0];
-        for (let c = 0; c < 9; c++) {
-            for (let i = 0; i < colCounts[c]; i++) {
-                let row;
-                do {
-                    row = Math.floor(Math.random() * 3);
-                } while(ticket[row][c] !== null || rowCounts[row] >= 5);
-                ticket[row][c] = 0; // Placeholder
-                rowCounts[row]++;
-            }
-        }
-        
-        // If any row doesn't have 5 numbers, this is an invalid layout, restart.
-        if (rowCounts.some(count => count !== 5)) {
+        // Attempt to place 15 number placeholders randomly, respecting constraints.
+        let placedCount = 0;
+        let attempts = 0;
+        while (placedCount < 15 && attempts < 2000) { // Safety break
+            const r = Math.floor(Math.random() * 3);
+            const c = Math.floor(Math.random() * 9);
             attempts++;
-            continue;
-        }
-
-        // Step 3: Fill the placeholders with actual numbers
-        for (let c = 0; c < 9; c++) {
-            const start = c * 10 + (c === 0 ? 1 : 0);
-            const end = (c === 8) ? 90 : c * 10 + 9;
-            const range = Array.from({length: end - start + 1}, (_, i) => start + i);
             
-            // Shuffle the range
-            for (let i = range.length - 1; i > 0; i--) {
-                const j = Math.floor(Math.random() * (i + 1));
-                [range[i], range[j]] = [range[j], range[i]];
-            }
-
-            let numIndex = 0;
-            for (let r = 0; r < 3; r++) {
-                if (ticket[r][c] === 0) {
-                    ticket[r][c] = range[numIndex++];
+            if (ticket[r][c] === null) {
+                // Check row constraint: max 5 numbers per row
+                if (ticket[r].filter(cell => cell !== null).length < 5) {
+                    // Check column constraint: max 3 numbers per column
+                     const colCount = (ticket[0][c] !== null ? 1 : 0) + (ticket[1][c] !== null ? 1 : 0) + (ticket[2][c] !== null ? 1 : 0);
+                    if(colCount < 3) {
+                        ticket[r][c] = 0; // Use 0 as a placeholder
+                        placedCount++;
+                    }
                 }
             }
         }
 
-        // Step 4: Check for row uniqueness
-        let ticketRowsString = ticket.map(row => JSON.stringify(row.filter(n => n !== null).sort((a,b) => a-b)));
-        if (!ticketRowsString.some(rowStr => generatedRows.has(rowStr))) {
-            isUnique = true;
-            ticketRowsString.forEach(rowStr => generatedRows.add(rowStr));
-        }
-        attempts++;
-    }
+        if (placedCount < 15) continue; // Failed to place 15, retry entire layout
 
-    if (!isUnique) {
-        console.error("Could not generate a unique ticket after 100 attempts.");
-        // Fallback or error handling
+        // Verify the final layout constraints
+        const colCounts = Array(9).fill(0);
+        const rowCounts = Array(3).fill(0);
+        for(let r=0; r<3; r++) {
+            for (let c=0; c<9; c++) {
+                if (ticket[r][c] !== null) {
+                    rowCounts[r]++;
+                    colCounts[c]++;
+                }
+            }
+        }
+
+        if (rowCounts.some(count => count !== 5)) continue; // A row doesn't have exactly 5, retry
+        if (colCounts.some(count => count === 0)) continue; // A column is empty, retry
+
+        // If layout is valid, fill placeholders with real numbers
+        for (let c = 0; c < 9; c++) {
+            const numCount = colCounts[c];
+            const start = c * 10 + (c === 0 ? 1 : 0);
+            const end = (c === 8) ? 90 : c * 10 + 9;
+            const range = Array.from({ length: end - start + 1 }, (_, i) => start + i);
+            
+            const colNumbers = [];
+            for(let i=0; i<numCount; i++) {
+                const randIndex = Math.floor(Math.random() * range.length);
+                colNumbers.push(range.splice(randIndex, 1)[0]);
+            }
+            colNumbers.sort((a, b) => a - b); // Sort numbers ascendingly
+
+            // Place sorted numbers back into the ticket
+            let numIndex = 0;
+            for (let r = 0; r < 3; r++) {
+                if (ticket[r][c] !== null) {
+                    ticket[r][c] = colNumbers[numIndex++];
+                }
+            }
+        }
+
+        return ticket; // A valid ticket has been generated
     }
-    return ticket;
 }
 
 
@@ -329,4 +327,5 @@ function checkAllWinners() {
         }
     });
 }
+
 
