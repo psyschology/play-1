@@ -37,6 +37,7 @@ const ticketSearch = document.getElementById('ticket-search');
 let lastAnnouncedWinners = {};
 let lastGameState = null;
 let lastCalledNumberTime = 0;
+let lastAnnouncedStartTime = 0;
 const synth = window.speechSynthesis;
 const audioContext = new (window.AudioContext || window.webkitAudioContext)();
 
@@ -52,7 +53,7 @@ function speak(text) {
         synth.cancel(); // Cancel previous utterance to prioritize the new one
     }
     const utterance = new SpeechSynthesisUtterance(text);
-    // Find a female voice
+    // Find a female voice for a better experience
     let voice = synth.getVoices().find(v => v.name.includes('Google US English') && v.lang.includes('en-US') && v.gender === 'female');
     if (!voice) {
         voice = synth.getVoices().find(v => v.lang.includes('en') && v.gender === 'female');
@@ -165,6 +166,7 @@ function renderTickets(tickets, calledNumbers) {
 
 // Update UI based on game state
 function updateUI(gameState) {
+    // Game Status
     const statusText = gameState.gameState ? gameState.gameState.charAt(0).toUpperCase() + gameState.gameState.slice(1) : 'Waiting...';
     gameStatusEl.textContent = statusText;
     
@@ -186,10 +188,22 @@ function updateUI(gameState) {
         lastCalledNumberTime = gameState.lastCalled.time;
     }
 
+    // Show/Hide board
     boardContainer.style.display = (gameState.gameState === 'running') ? 'block' : 'none';
+
+    // Ticket Price
     ticketPriceEl.textContent = gameState.ticketPrice ? `₹${gameState.ticketPrice}` : '--';
-    gameStartTimeEl.textContent = gameState.gameStartTime ? new Date(gameState.gameStartTime).toLocaleString() : 'Not Scheduled';
+
+    // Game Start Time & Announcement
+    const startTime = gameState.gameStartTime ? new Date(gameState.gameStartTime) : null;
+    gameStartTimeEl.textContent = startTime ? startTime.toLocaleString() : 'Not Scheduled';
+    if (startTime && startTime.getTime() !== lastAnnouncedStartTime) {
+        const timeString = startTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        speak(`The game is scheduled to start at ${timeString}.`);
+        lastAnnouncedStartTime = startTime.getTime();
+    }
     
+    // Update called numbers on the main board
     document.querySelectorAll('.number.called').forEach(el => el.classList.remove('called'));
     if (gameState.calledNumbers) {
         Object.keys(gameState.calledNumbers).forEach(num => {
@@ -218,11 +232,14 @@ function updateUI(gameState) {
             let winnerText = 'Pending';
             if (award.winner) {
                 winnerText = `🏆 ${award.winner.owner} (Tkt #${award.winner.ticketNumber})`;
+                // Check if this is a new winner announcement
                 if (!lastAnnouncedWinners[award.key]) {
                     winnerTitle.innerHTML = `🎉 ${award.name} Won! 🎉`;
                     winnerDetails.textContent = `Won by ${award.winner.owner} with Ticket #${award.winner.ticketNumber}`;
                     winnerModal.style.display = 'flex';
                     playWinnerSound();
+                    // Speak the winner details
+                    speak(`${award.name} won by ${award.winner.owner} with Ticket number ${award.winner.ticketNumber}`);
                     setTimeout(() => { winnerModal.style.display = 'none'; }, 5000);
                     lastAnnouncedWinners[award.key] = true;
                 }
@@ -232,10 +249,7 @@ function updateUI(gameState) {
         });
     }
 
-    filterTickets();
-}
-
-function filterTickets() {
+    // After rendering, apply search filter if there's any text
     const query = ticketSearch.value.toLowerCase();
     const allTickets = document.querySelectorAll('.ticket');
     allTickets.forEach(ticket => {
@@ -264,12 +278,14 @@ function main() {
         if (gameState) {
             updateUI(gameState);
         } else {
+            console.log("No active game found in the database.");
             gameStatusEl.textContent = 'No Game Active';
         }
     });
 
     ticketSearch.addEventListener('input', filterTickets);
-    // A user interaction is needed to enable audio context in many browsers
+    // A user interaction is needed to enable audio context in many browsers.
+    // This ensures sounds and voice will play reliably.
     document.body.addEventListener('click', () => {
         if (audioContext.state === 'suspended') {
             audioContext.resume();
@@ -277,5 +293,6 @@ function main() {
     }, { once: true });
 }
 
+// Run on page load
 main();
 
