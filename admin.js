@@ -7,7 +7,6 @@ import { getDatabase, ref, onValue, set, update, remove } from "https://www.gsta
 const firebaseConfig = {
     apiKey: "AIzaSyBZ9VKH0SVMOYdvYOO_XY_ycjB0C1ty_BU",
     authDomain: "play-2b9e2.firebaseapp.com",
-    // IMPORTANT: You must create a Realtime Database in your Firebase project and add its URL here.
     databaseURL: "https://play-2b9e2-default-rtdb.firebaseio.com",
     projectId: "play-2b9e2",
     storageBucket: "play-2b9e2.appspot.com",
@@ -42,12 +41,12 @@ const setStartTimeBtn = document.getElementById('set-start-time-btn');
 const ticketsList = document.getElementById('tickets-management-list');
 const awardsList = document.getElementById('awards-list');
 const winnersList = document.getElementById('winners-list');
-const addAwardBtn = document.getElementById('add-award-btn');
+const setPrizesBtn = document.getElementById('set-prizes-btn');
+
 
 // Game state reference
 const gameRef = ref(database, 'tambolaGame/activeGame');
 let currentGameState = {};
-const synth = window.speechSynthesis;
 
 // --- Authentication ---
 onAuthStateChanged(auth, user => {
@@ -77,7 +76,10 @@ function initDashboard() {
     onValue(gameRef, (snapshot) => {
         currentGameState = snapshot.val() || {};
         updateAdminUI();
-        checkAllWinners();
+        // Winner check only if game is running
+        if (currentGameState.gameState === 'running') {
+            checkAllWinners();
+        }
     });
     
     startGameBtn.addEventListener('click', () => update(gameRef, { gameState: 'running' }));
@@ -86,7 +88,7 @@ function initDashboard() {
     setPriceBtn.addEventListener('click', () => update(gameRef, { ticketPrice: Number(document.getElementById('ticket-price').value) }));
     setStartTimeBtn.addEventListener('click', () => update(gameRef, { gameStartTime: new Date(document.getElementById('game-start-time').value).getTime() }));
     generateTicketsBtn.addEventListener('click', () => generateAndSaveTickets(Number(document.getElementById('ticket-limit').value)));
-    addAwardBtn.addEventListener('click', addAward);
+    setPrizesBtn.addEventListener('click', setPrizes);
 }
 
 function createAdminBoard() {
@@ -127,10 +129,13 @@ function updateAdminUI() {
     awardsList.innerHTML = '';
     winnersList.innerHTML = '';
     if (currentGameState.awards) {
-        Object.entries(currentGameState.awards).forEach(([key, award]) => {
+        Object.values(currentGameState.awards).forEach(award => {
+            // Update prize input fields
+            const prizeInput = document.getElementById(`prize-${award.key}`);
+            if (prizeInput) prizeInput.value = award.prize;
+
             const awardItem = document.createElement('li');
-            awardItem.innerHTML = `<span>${award.name} (₹${award.prize})</span> <button data-key="${key}" class="end">X</button>`;
-            awardItem.querySelector('button').onclick = () => remove(ref(database, `tambolaGame/activeGame/awards/${key}`));
+            awardItem.innerHTML = `<span>${award.name} (₹${award.prize})</span>`;
             awardsList.appendChild(awardItem);
             
             if(award.winner) {
@@ -142,43 +147,17 @@ function updateAdminUI() {
     }
 }
 
-// --- Voice Synthesis for Number Calling ---
-function numberToWords(num) {
-    const single = ["", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine"];
-    if (num < 10) return single[num];
-    if (num === 90) return "nine zero, ninety";
-    const tens = ["", "", "twenty", "thirty", "forty", "fifty", "sixty", "seventy", "eighty", "ninety"];
-    const teens = ["ten", "eleven", "twelve", "thirteen", "fourteen", "fifteen", "sixteen", "seventeen", "eighteen", "nineteen"];
-
-    if (num < 20) return teens[num - 10];
-    
-    const ten = Math.floor(num / 10);
-    const one = num % 10;
-
-    let parts = [];
-    parts.push(single[ten]);
-    parts.push(single[one]);
-
-    return `${parts.join(' ')}, ${tens[ten]}${one > 0 ? ' ' + single[one] : ''}`;
-}
-
-function announceNumber(num) {
-    if (synth.speaking) return;
-    const text = (num < 10) ? `Number ${numberToWords(num)}` : `Number ${numberToWords(num)}`;
-    const utterance = new SpeechSynthesisUtterance(text);
-    utterance.voice = synth.getVoices().find(v => v.name.includes('Google US English') && v.lang.includes('en-US')) || synth.getVoices()[0];
-    utterance.rate = 0.9;
-    synth.speak(utterance);
-}
 
 // --- Game Logic Functions ---
 function callNumber(num) {
     if(currentGameState.gameState !== 'running' || (currentGameState.calledNumbers && currentGameState.calledNumbers[num])) {
         return;
     }
-    announceNumber(num);
+    // Voice announcement is now handled on the client-side (index.js)
     const updates = {};
     updates[`/calledNumbers/${num}`] = true;
+    // Also store the timestamp to identify the last called number
+    updates[`/lastCalled`] = { number: num, time: Date.now() };
     update(gameRef, updates);
 }
 
@@ -187,35 +166,36 @@ function saveTicketOwner(ticketId) {
     update(ref(database, `tambolaGame/activeGame/tickets/ticket_${ticketId}`), { owner: ownerName });
 }
 
-function addAward() {
-    const awardName = document.getElementById('award-name').value.trim();
-    const awardPrize = document.getElementById('award-prize').value;
-    if (!awardName || !awardPrize) return;
-
-    const key = awardName.toLowerCase().replace(/\s+/g, '');
-    const updates = {};
-    updates[`/awards/${key}`] = { name: awardName, prize: Number(awardPrize), winner: null };
-    update(gameRef, updates);
-    document.getElementById('award-name').value = '';
-    document.getElementById('award-prize').value = '';
+function setPrizes() {
+    const awards = {
+        fullhouse: { key: 'fullhouse', name: "Full House", prize: Number(document.getElementById('prize-fullhouse').value), winner: currentGameState.awards?.fullhouse?.winner || null },
+        topline: { key: 'topline', name: "Top Line", prize: Number(document.getElementById('prize-topline').value), winner: currentGameState.awards?.topline?.winner || null },
+        middleline: { key: 'middleline', name: "Middle Line", prize: Number(document.getElementById('prize-middleline').value), winner: currentGameState.awards?.middleline?.winner || null },
+        bottomline: { key: 'bottomline', name: "Bottom Line", prize: Number(document.getElementById('prize-bottomline').value), winner: currentGameState.awards?.bottomline?.winner || null },
+        fourcorners: { key: 'fourcorners', name: "Four Corners", prize: Number(document.getElementById('prize-fourcorners').value), winner: currentGameState.awards?.fourcorners?.winner || null },
+        earlyfive: { key: 'earlyfive', name: "Early Five", prize: Number(document.getElementById('prize-earlyfive').value), winner: currentGameState.awards?.earlyfive?.winner || null },
+    };
+    update(gameRef, { awards });
+    alert("Prizes have been set!");
 }
+
 
 function resetGame() {
     if (!confirm("Are you sure? This will reset called numbers, winners, and unbook all tickets.")) return;
     
-    const newState = { ...currentGameState, gameState: 'stopped', calledNumbers: null };
+    const newState = { ...currentGameState, gameState: 'stopped', calledNumbers: null, lastCalled: null };
     if(newState.awards) Object.keys(newState.awards).forEach(k => newState.awards[k].winner = null);
     if(newState.tickets) Object.keys(newState.tickets).forEach(k => newState.tickets[k].owner = 'Unbooked');
 
     set(gameRef, newState);
 }
 
-// --- Ticket Generation ---
+// --- Ticket Generation (New Logic) ---
 function generateAndSaveTickets(limit) {
     if (!limit || limit <= 0) return alert("Please enter a valid ticket limit.");
     
     const tickets = {};
-    const generatedRows = new Set(); // To prevent duplicate rows across all tickets
+    const generatedRows = new Set(); 
 
     for (let i = 1; i <= limit; i++) {
         tickets[`ticket_${i}`] = {
@@ -232,52 +212,58 @@ function generateAndSaveTickets(limit) {
 function generateTambolaTicket(generatedRows) {
     let ticket;
     let isUnique = false;
-    // Keep generating tickets until we find one whose rows are unique
-    while(!isUnique){
-        ticket = Array(3).fill(null).map(() => Array(9).fill(null));
-        let numbersInTicket = new Set();
-        
-        // Step 1: Place 1 number in each column
-        for (let c = 0; c < 9; c++) {
-            const start = c * 10 + (c === 0 ? 1 : 0);
-            const end = c * 10 + 9;
-            let num = Math.floor(Math.random() * (end - start + 1)) + start;
-            if(c === 8) num = Math.floor(Math.random() * (90 - 80 + 1)) + 80;
+    let attempts = 0;
 
-            numbersInTicket.add(num);
-            let row = Math.floor(Math.random() * 3);
-            ticket[row][c] = num;
+    while(!isUnique && attempts < 100) { // Safety break
+        ticket = Array(3).fill(null).map(() => Array(9).fill(null));
+        
+        // Step 1: Determine number of elements per column (1, 2, or 3)
+        let colCounts = [1,1,1,1,1,1,1,1,1]; // 9 numbers
+        for (let i = 0; i < 6; i++) { // Distribute remaining 6 numbers
+            let col;
+            do {
+                col = Math.floor(Math.random() * 9);
+            } while (colCounts[col] >= 3);
+            colCounts[col]++;
         }
 
-        // Step 2: Place remaining 6 numbers to ensure 5 per row
-        let remaining = 6;
-        while(remaining > 0){
-            let r = Math.floor(Math.random() * 3);
-            let c = Math.floor(Math.random() * 9);
-
-            const rowCount = ticket[r].filter(n => n !== null).length;
-            if(ticket[r][c] === null && rowCount < 5){
-                const start = c * 10 + (c === 0 ? 1 : 0);
-                const end = c * 10 + 9;
-                let num;
+        // Step 2: Determine which rows get numbers in each column
+        let rowCounts = [0,0,0];
+        for (let c = 0; c < 9; c++) {
+            for (let i = 0; i < colCounts[c]; i++) {
+                let row;
                 do {
-                    num = Math.floor(Math.random() * (end - start + 1)) + start;
-                    if(c === 8) num = Math.floor(Math.random() * (90 - 80 + 1)) + 80;
-                } while (numbersInTicket.has(num));
-                
-                ticket[r][c] = num;
-                numbersInTicket.add(num);
-                remaining--;
+                    row = Math.floor(Math.random() * 3);
+                } while(ticket[row][c] !== null || rowCounts[row] >= 5);
+                ticket[row][c] = 0; // Placeholder
+                rowCounts[row]++;
             }
         }
         
-        // Step 3: Sort numbers within each column
+        // If any row doesn't have 5 numbers, this is an invalid layout, restart.
+        if (rowCounts.some(count => count !== 5)) {
+            attempts++;
+            continue;
+        }
+
+        // Step 3: Fill the placeholders with actual numbers
         for (let c = 0; c < 9; c++) {
-            let colVals = [];
-            for(let r = 0; r < 3; r++) if(ticket[r][c] !== null) colVals.push(ticket[r][c]);
-            colVals.sort((a,b) => a-b);
-            let valIndex = 0;
-            for(let r = 0; r < 3; r++) if(ticket[r][c] !== null) ticket[r][c] = colVals[valIndex++];
+            const start = c * 10 + (c === 0 ? 1 : 0);
+            const end = (c === 8) ? 90 : c * 10 + 9;
+            const range = Array.from({length: end - start + 1}, (_, i) => start + i);
+            
+            // Shuffle the range
+            for (let i = range.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [range[i], range[j]] = [range[j], range[i]];
+            }
+
+            let numIndex = 0;
+            for (let r = 0; r < 3; r++) {
+                if (ticket[r][c] === 0) {
+                    ticket[r][c] = range[numIndex++];
+                }
+            }
         }
 
         // Step 4: Check for row uniqueness
@@ -286,6 +272,12 @@ function generateTambolaTicket(generatedRows) {
             isUnique = true;
             ticketRowsString.forEach(rowStr => generatedRows.add(rowStr));
         }
+        attempts++;
+    }
+
+    if (!isUnique) {
+        console.error("Could not generate a unique ticket after 100 attempts.");
+        // Fallback or error handling
     }
     return ticket;
 }
@@ -296,21 +288,35 @@ function checkAllWinners() {
     if (!currentGameState.tickets || !currentGameState.awards || !currentGameState.calledNumbers) return;
     const { calledNumbers, tickets, awards } = currentGameState;
 
-    Object.entries(awards).forEach(([key, award]) => {
-        if (award.winner) return;
+    Object.values(awards).forEach(award => {
+        if (award.winner) return; // Skip if winner already found
 
         const winningTicket = Object.values(tickets).find(ticket => {
             const ticketNumbers = ticket.numbers.flat().filter(n => n !== null);
             
-            switch (key) {
+            switch (award.key) {
                 case 'fullhouse':
                     return ticketNumbers.every(num => calledNumbers[num]);
-                case 'firstrow':
+                case 'topline':
                     return ticket.numbers[0].filter(n => n !== null).every(num => calledNumbers[num]);
-                case 'secondrow':
+                case 'middleline':
                     return ticket.numbers[1].filter(n => n !== null).every(num => calledNumbers[num]);
-                case 'thirdrow':
+                case 'bottomline':
                     return ticket.numbers[2].filter(n => n !== null).every(num => calledNumbers[num]);
+                case 'earlyfive':
+                    return ticketNumbers.filter(num => calledNumbers[num]).length >= 5;
+                case 'fourcorners': {
+                    const topRow = ticket.numbers[0].filter(n => n !== null);
+                    const bottomRow = ticket.numbers[2].filter(n => n !== null);
+                    if (topRow.length === 0 || bottomRow.length === 0) return false;
+                    const corners = [
+                        topRow[0],
+                        topRow[topRow.length - 1],
+                        bottomRow[0],
+                        bottomRow[bottomRow.length - 1]
+                    ];
+                    return corners.every(c => c && calledNumbers[c]);
+                }
                 default:
                     return false;
             }
@@ -319,7 +325,7 @@ function checkAllWinners() {
         if (winningTicket) {
             console.log(`Winner for ${award.name}: Ticket #${winningTicket.ticketNumber}`);
             const winnerInfo = { owner: winningTicket.owner, ticketNumber: winningTicket.ticketNumber };
-            update(ref(database, `tambolaGame/activeGame/awards/${key}`), { winner: winnerInfo });
+            update(ref(database, `tambolaGame/activeGame/awards/${award.key}`), { winner: winnerInfo });
         }
     });
 }
