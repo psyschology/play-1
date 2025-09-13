@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tambola Housie Game</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            background-color: #f0f2f5;
+            color: #1c1e21;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        .container {
+            width: 100%;
+            max-width: 1200px;
+            background-color: #fff;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            padding: 20px;
+            box-sizing: border-box;
+        }
+        h1, h2 {
+            color: #0c5a9e;
+            text-align: center;
+            border-bottom: 2px solid #f0f2f5;
+            padding-bottom: 10px;
+        }
+        #game-info, #awards-info {
+            display: flex;
+            justify-content: space-around;
+            flex-wrap: wrap;
+            background-color: #e7f3ff;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+        #game-info div, #awards-info div {
+            margin: 5px 15px;
+        }
+        #game-info span, #awards-info span {
+            font-weight: bold;
+            color: #05386b;
+        }
+        #number-board {
+            display: grid;
+            grid-template-columns: repeat(10, 1fr);
+            gap: 8px;
+            margin: 20px 0;
+            padding: 15px;
+            background: #f9f9f9;
+            border-radius: 8px;
+        }
+        .number {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 45px;
+            background-color: #fff;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            font-size: 1.2em;
+            font-weight: bold;
+            transition: background-color 0.3s, color 0.3s;
+        }
+        .number.called {
+            background-color: #28a745;
+            color: white;
+            transform: scale(1.1);
+            box-shadow: 0 0 10px rgba(40, 167, 69, 0.5);
+        }
+        #called-numbers-container {
+            margin: 20px 0;
+        }
+        #called-numbers-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            min-height: 40px;
+        }
+        .called-number-item {
+            padding: 8px 12px;
+            background-color: #007bff;
+            color: white;
+            border-radius: 20px;
+            font-weight: bold;
+        }
+        #winner-banner {
+            display: none;
+            padding: 15px;
+            margin: 20px 0;
+            background-color: #ffc107;
+            color: #333;
+            text-align: center;
+            font-size: 1.5em;
+            font-weight: bold;
+            border-radius: 8px;
+            animation: fadeInOut 5s forwards;
+        }
+        @keyframes fadeInOut {
+            0%, 100% { opacity: 0; }
+            10%, 90% { opacity: 1; }
+        }
+        .ticket-search {
+            width: 100%;
+            padding: 12px;
+            margin-bottom: 20px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            font-size: 1em;
+            box-sizing: border-box;
+        }
+        #tickets-container {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 20px;
+        }
+        .ticket {
+            border: 2px solid #0c5a9e;
+            border-radius: 8px;
+            padding: 10px;
+            background-color: #fdfdfd;
+        }
+        .ticket-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+            padding-bottom: 5px;
+            border-bottom: 1px solid #eee;
+        }
+        .ticket-number {
+            font-weight: bold;
+            font-size: 1.2em;
+        }
+        .ticket-owner {
+            font-style: italic;
+            color: #555;
+        }
+        .ticket-grid {
+            display: grid;
+            grid-template-columns: repeat(9, 1fr);
+        }
+        .ticket-cell {
+            height: 35px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            border: 1px solid #e0e0e0;
+            font-size: 1em;
+        }
+        .ticket-cell.filled {
+            font-weight: bold;
+            background-color: #e7f3ff;
+        }
+        .ticket-cell.marked {
+            background-color: #28a745;
+            color: white;
+            text-decoration: line-through;
+        }
+        .book-link {
+            display: inline-block;
+            margin-top: 10px;
+            padding: 5px 10px;
+            background-color: #25D366;
+            color: white;
+            text-decoration: none;
+            border-radius: 5px;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <h1>Tambola Housie Live</h1>
+
+        <div id="game-info">
+            <div>Status: <span id="game-status">Waiting...</span></div>
+            <div>Ticket Price: <span id="ticket-price">--</span></div>
+            <div>Game Starts: <span id="game-start-time">Not Scheduled</span></div>
+        </div>
+
+        <div id="winner-banner"></div>
+
+        <div id="awards-info">
+            <!-- Awards will be dynamically inserted here -->
+        </div>
+
+        <div id="board-container" style="display: none;">
+            <h2>Live Board</h2>
+            <div id="number-board"></div>
+        </div>
+        
+        <div id="called-numbers-container">
+            <h3>Called Numbers</h3>
+            <div id="called-numbers-list"></div>
+        </div>
+
+        <h2>Tickets</h2>
+        <input type="text" id="ticket-search" class="ticket-search" placeholder="Search by Ticket Number or Name...">
+        <div id="tickets-container"></div>
+    </div>
+
+    <!-- Firebase SDK -->
+    <script type="module" src="index.js"></script>
+</body>
+</html>
