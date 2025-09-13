@@ -6,7 +6,6 @@ import { getDatabase, ref, onValue } from "https://www.gstatic.com/firebasejs/9.
 const firebaseConfig = {
     apiKey: "AIzaSyBZ9VKH0SVMOYdvYOO_XY_ycjB0C1ty_BU",
     authDomain: "play-2b9e2.firebaseapp.com",
-    // IMPORTANT: You must create a Realtime Database in your Firebase project and add its URL here.
     databaseURL: "https://play-2b9e2-default-rtdb.firebaseio.com", 
     projectId: "play-2b9e2",
     storageBucket: "play-2b9e2.appspot.com",
@@ -37,18 +36,28 @@ const ticketSearch = document.getElementById('ticket-search');
 // State for sound and speech control
 let lastAnnouncedWinners = {};
 let lastGameState = null;
+let lastCalledNumberTime = 0;
 const synth = window.speechSynthesis;
 const audioContext = new (window.AudioContext || window.webkitAudioContext)();
 
 // --- Sound and Speech Synthesis ---
 
 function speak(text) {
+    // Request audio focus and play
+    if (audioContext.state === 'suspended') {
+        audioContext.resume();
+    }
     if (synth.speaking) {
-        console.error('SpeechSynthesis.speaking');
-        return;
+        console.error('SpeechSynthesis is busy.');
+        synth.cancel(); // Cancel previous utterance to prioritize the new one
     }
     const utterance = new SpeechSynthesisUtterance(text);
-    utterance.voice = synth.getVoices().find(v => v.name.includes('Google US English') && v.lang.includes('en-US')) || synth.getVoices()[0];
+    // Find a female voice
+    let voice = synth.getVoices().find(v => v.name.includes('Google US English') && v.lang.includes('en-US') && v.gender === 'female');
+    if (!voice) {
+        voice = synth.getVoices().find(v => v.lang.includes('en') && v.gender === 'female');
+    }
+    utterance.voice = voice || synth.getVoices()[0];
     utterance.pitch = 1;
     utterance.rate = 0.9;
     synth.speak(utterance);
@@ -56,6 +65,9 @@ function speak(text) {
 
 function playWinnerSound() {
     try {
+        if (audioContext.state === 'suspended') {
+            audioContext.resume();
+        }
         const oscillator = audioContext.createOscillator();
         const gainNode = audioContext.createGain();
         oscillator.connect(gainNode);
@@ -75,6 +87,25 @@ function playWinnerSound() {
     } catch (e) {
         console.error("Could not play sound:", e);
     }
+}
+
+function numberToWords(num) {
+    const single = ["", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine"];
+    if (num < 10) return single[num];
+    if (num === 90) return "nine zero, ninety";
+    const tens = ["", "", "twenty", "thirty", "forty", "fifty", "sixty", "seventy", "eighty", "ninety"];
+    const teens = ["ten", "eleven", "twelve", "thirteen", "fourteen", "fifteen", "sixteen", "seventeen", "eighteen", "nineteen"];
+
+    if (num < 20) return teens[num - 10];
+    
+    const ten = Math.floor(num / 10);
+    const one = num % 10;
+
+    let parts = [];
+    parts.push(single[ten]);
+    parts.push(single[one]);
+
+    return `${parts.join(' ')}, ${tens[ten]}${one > 0 ? ' ' + single[one] : ''}`;
 }
 
 
@@ -101,7 +132,6 @@ function renderTickets(tickets, calledNumbers) {
         ticketEl.dataset.ticketNumber = ticket.ticketNumber;
         ticketEl.dataset.ticketOwner = ticket.owner.toLowerCase();
 
-
         let ticketHTML = `
             <div class="ticket-header">
                 <div class="ticket-number">Ticket #${ticket.ticketNumber}</div>
@@ -125,8 +155,7 @@ function renderTickets(tickets, calledNumbers) {
         
         if (ticket.owner === 'Unbooked') {
             const message = encodeURIComponent(`I'd like to book ticket #${ticket.ticketNumber}`);
-            // IMPORTANT: Replace placeholder number with your actual WhatsApp number
-            ticketHTML += `<a href="https://wa.me/1234567890?text=${message}" target="_blank" class="book-link">Book Now on WhatsApp</a>`;
+            ticketHTML += `<a href="https://wa.me/910000000000?text=${message}" target="_blank" class="book-link">Book Now on WhatsApp</a>`;
         }
         
         ticketEl.innerHTML = ticketHTML;
@@ -136,28 +165,31 @@ function renderTickets(tickets, calledNumbers) {
 
 // Update UI based on game state
 function updateUI(gameState) {
-    // Game Status
     const statusText = gameState.gameState ? gameState.gameState.charAt(0).toUpperCase() + gameState.gameState.slice(1) : 'Waiting...';
     gameStatusEl.textContent = statusText;
     
     // --- Voice Prompts on State Change ---
     if (lastGameState !== gameState.gameState) {
-        if (gameState.gameState === 'running' && lastGameState !== 'running') {
+        if (gameState.gameState === 'running') {
             speak("Game started.");
+        } else if (gameState.gameState === 'ended' && lastGameState === 'running') {
+            speak("Game has ended.");
         }
         lastGameState = gameState.gameState;
     }
 
-    // Show/Hide board
+    // Announce new number
+    if (gameState.lastCalled && gameState.lastCalled.time > lastCalledNumberTime) {
+        const num = gameState.lastCalled.number;
+        const text = (num < 10) ? `Number ${numberToWords(num)}` : `Number ${numberToWords(num)}`;
+        speak(text);
+        lastCalledNumberTime = gameState.lastCalled.time;
+    }
+
     boardContainer.style.display = (gameState.gameState === 'running') ? 'block' : 'none';
-
-    // Ticket Price
     ticketPriceEl.textContent = gameState.ticketPrice ? `₹${gameState.ticketPrice}` : '--';
-
-    // Game Start Time
     gameStartTimeEl.textContent = gameState.gameStartTime ? new Date(gameState.gameStartTime).toLocaleString() : 'Not Scheduled';
     
-    // Update called numbers on the main board
     document.querySelectorAll('.number.called').forEach(el => el.classList.remove('called'));
     if (gameState.calledNumbers) {
         Object.keys(gameState.calledNumbers).forEach(num => {
@@ -166,7 +198,6 @@ function updateUI(gameState) {
         });
     }
 
-    // Update called numbers list
     calledNumbersList.innerHTML = '';
     if(gameState.calledNumbers) {
         const sortedCalledNumbers = Object.keys(gameState.calledNumbers).map(Number).sort((a,b) => a-b);
@@ -178,25 +209,22 @@ function updateUI(gameState) {
         });
     }
     
-    // Render Tickets
     renderTickets(gameState.tickets, gameState.calledNumbers);
 
-    // Render Awards and check for new winners
     awardsInfo.innerHTML = '';
     if (gameState.awards) {
-        Object.entries(gameState.awards).forEach(([key, award]) => {
+        Object.values(gameState.awards).forEach(award => {
             const awardEl = document.createElement('div');
             let winnerText = 'Pending';
             if (award.winner) {
                 winnerText = `🏆 ${award.winner.owner} (Tkt #${award.winner.ticketNumber})`;
-                // Check if this is a new winner announcement
-                if (!lastAnnouncedWinners[key]) {
+                if (!lastAnnouncedWinners[award.key]) {
                     winnerTitle.innerHTML = `🎉 ${award.name} Won! 🎉`;
                     winnerDetails.textContent = `Won by ${award.winner.owner} with Ticket #${award.winner.ticketNumber}`;
                     winnerModal.style.display = 'flex';
                     playWinnerSound();
                     setTimeout(() => { winnerModal.style.display = 'none'; }, 5000);
-                    lastAnnouncedWinners[key] = true;
+                    lastAnnouncedWinners[award.key] = true;
                 }
             }
             awardEl.innerHTML = `<span>${award.name} (₹${award.prize || 0}):</span> ${winnerText}`;
@@ -204,11 +232,9 @@ function updateUI(gameState) {
         });
     }
 
-    // After rendering, apply search filter if there's any text
     filterTickets();
 }
 
-// Search/Filter logic
 function filterTickets() {
     const query = ticketSearch.value.toLowerCase();
     const allTickets = document.querySelectorAll('.ticket');
@@ -223,11 +249,9 @@ function filterTickets() {
     });
 }
 
-// Main function to initialize the page
 function main() {
     createBoard();
     
-    // Initial voice prompt if game is not running
     setTimeout(() => {
        if(gameStatusEl.textContent === 'Waiting...' || gameStatusEl.textContent === 'Stopped'){
             speak("Game will commence at the time set by admin.");
@@ -240,14 +264,18 @@ function main() {
         if (gameState) {
             updateUI(gameState);
         } else {
-            console.log("No active game found in the database.");
             gameStatusEl.textContent = 'No Game Active';
         }
     });
 
     ticketSearch.addEventListener('input', filterTickets);
+    // A user interaction is needed to enable audio context in many browsers
+    document.body.addEventListener('click', () => {
+        if (audioContext.state === 'suspended') {
+            audioContext.resume();
+        }
+    }, { once: true });
 }
 
-// Run on page load
 main();
 
