@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Dashboard - Tambola</title>
+    <style>
+        body { font-family: sans-serif; background-color: #f4f4f9; color: #333; margin: 0; padding: 20px; }
+        .container { max-width: 1400px; margin: auto; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1); }
+        h1, h2 { color: #4a4a4a; }
+        
+        /* Login Form */
+        #login-form { text-align: center; }
+        #login-form input { display: block; width: 300px; margin: 10px auto; padding: 10px; font-size: 1em; }
+        #login-error { color: red; margin-top: 10px; }
+        
+        /* Dashboard */
+        .dashboard-section { margin-bottom: 30px; padding: 20px; border: 1px solid #ddd; border-radius: 8px; }
+        .controls, .settings { display: flex; flex-wrap: wrap; gap: 15px; align-items: center; }
+        button { padding: 10px 15px; font-size: 1em; border-radius: 5px; border: none; cursor: pointer; color: white; }
+        button.start { background-color: #28a745; }
+        button.end { background-color: #dc3545; }
+        button.reset { background-color: #ffc107; color: #333; }
+        button.primary { background-color: #007bff; }
+        input[type="number"], input[type="text"] { padding: 10px; font-size: 1em; border-radius: 5px; border: 1px solid #ccc; }
+        label { font-weight: bold; margin-right: 5px; }
+
+        /* Number Board */
+        #admin-number-board { display: grid; grid-template-columns: repeat(15, 1fr); gap: 5px; margin-top: 20px; }
+        .admin-number { height: 40px; background-color: #f0f0f0; border-radius: 4px; cursor: pointer; transition: background-color 0.2s; display: flex; justify-content: center; align-items: center; font-weight: bold; }
+        .admin-number:hover { background-color: #ddd; }
+        .admin-number.called { background-color: #17a2b8; color: white; }
+
+        /* Tickets Management */
+        #tickets-management-list { max-height: 500px; overflow-y: auto; margin-top: 15px; }
+        .ticket-admin-item { display: flex; gap: 10px; align-items: center; padding: 8px; border-bottom: 1px solid #eee; }
+        .ticket-admin-item span { min-width: 100px; }
+        .ticket-admin-item input { flex-grow: 1; }
+        .ticket-admin-item button { padding: 5px 10px; font-size: 0.9em; }
+
+        /* Winners & Awards */
+        #winners-list, #awards-list { list-style-type: none; padding: 0; }
+        #winners-list li, #awards-list li { background-color: #e9ecef; padding: 8px; margin-bottom: 5px; border-radius: 4px; }
+        #winners-list li span, #awards-list li span { font-weight: bold; }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <h1>Admin Dashboard</h1>
+
+        <!-- Login Form -->
+        <div id="login-form">
+            <h2>Admin Login</h2>
+            <input type="email" id="email" placeholder="Email">
+            <input type="password" id="password" placeholder="Password">
+            <button id="login-btn" class="primary">Login</button>
+            <p id="login-error"></p>
+        </div>
+
+        <!-- Main Dashboard (hidden by default) -->
+        <div id="dashboard" style="display:none;">
+            <p>Welcome, <span id="admin-email"></span>. <button id="logout-btn" class="end">Logout</button></p>
+
+            <div class="dashboard-section">
+                <h2>Game Controls</h2>
+                <div class="controls">
+                    <button id="start-game-btn" class="start">Start Game</button>
+                    <button id="end-game-btn" class="end">End Game</button>
+                    <button id="reset-game-btn" class="reset">Reset Game</button>
+                    <span id="game-state-display">Current State: --</span>
+                </div>
+            </div>
+
+            <div class="dashboard-section">
+                <h2>Call Numbers</h2>
+                <div id="admin-number-board"></div>
+            </div>
+
+            <div class="dashboard-section">
+                <h2>Game Settings</h2>
+                <div class="settings">
+                    <div>
+                        <label for="ticket-price">Ticket Price:</label>
+                        <input type="number" id="ticket-price" min="0">
+                        <button id="set-price-btn" class="primary">Set Price</button>
+                    </div>
+                    <div>
+                        <label for="ticket-limit">Ticket Limit:</label>
+                        <input type="number" id="ticket-limit" min="1" max="500">
+                        <button id="generate-tickets-btn" class="primary">Generate Tickets</button>
+                    </div>
+                    <div>
+                        <label for="game-start-time">Start Time:</label>
+                        <input type="datetime-local" id="game-start-time">
+                        <button id="set-start-time-btn" class="primary">Set Time</button>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="dashboard-section">
+                <h2>Awards Management</h2>
+                <div class="settings">
+                    <input type="text" id="award-name" placeholder="e.g., Full House, First Row">
+                    <button id="add-award-btn" class="primary">Add Award</button>
+                </div>
+                <h3>Current Awards</h3>
+                <ul id="awards-list"></ul>
+            </div>
+            
+            <div class="dashboard-section">
+                <h2>Winner Announcements</h2>
+                <ul id="winners-list"></ul>
+            </div>
+
+            <div class="dashboard-section">
+                <h2>Ticket Management</h2>
+                <div id="tickets-management-list"></div>
+            </div>
+
+        </div>
+    </div>
+
+    <!-- Firebase SDK -->
+    <script type="module" src="admin.js"></script>
+</body>
+</html>
