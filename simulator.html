@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Housie Game Simulator</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        .ticket-cell, .board-cell {
+            transition: all 0.3s ease-in-out;
+        }
+        .ticket-cell.marked {
+            background-color: #34D399;
+            color: white;
+            transform: scale(1.05);
+            text-decoration: line-through;
+        }
+        .board-cell.called {
+            background-color: #60A5FA;
+            color: white;
+            transform: scale(1.1);
+        }
+        .claimed-prize {
+            background-color: #FBBF24;
+            color: #4B5563;
+        }
+    </style>
+    <!-- Chosen Palette: Warm Neutrals with Blue and Green accents -->
+    <!-- Application Structure Plan: A task-oriented, single-page layout simulating a real Housie game. The structure is split into a control/caller area (number board, controls, current number) and a player area (the interactive ticket). A rules/dividends section is at the bottom for context. This structure was chosen because it directly mirrors the real-world game flow, making it instantly intuitive for a user trying to learn. The user drives the game by drawing numbers and marking their ticket, which is the most effective way to learn the rules and flow. -->
+    <!-- Visualization & Content Choices: 
+        - Housie Board (1-90): Goal: Organize/Inform. Method: HTML/CSS grid. Interaction: Called numbers change color. Justification: Provides a crucial visual summary of the game state.
+        - Player Ticket: Goal: Interact/Organize. Method: HTML table. Interaction: Users click to mark numbers; the app checks for wins. Justification: Core interactive element for simulating gameplay.
+        - Winning Patterns List: Goal: Inform. Method: Styled HTML list. Interaction: Patterns highlight when achieved. Justification: Teaches the game's objectives and provides instant positive feedback.
+        - Game Controls: Goal: Control. Method: HTML buttons. Interaction: Clicks drive game state (new game, next number). Justification: Gives the user control over the simulation's pace.
+        - Library/Method: Vanilla JavaScript for all logic, Tailwind CSS for styling. -->
+    <!-- CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. -->
+</head>
+<body class="bg-gray-100 text-gray-800">
+
+    <div class="container mx-auto p-4 md:p-8 max-w-7xl">
+        <header class="text-center mb-8">
+            <h1 class="text-4xl md:text-5xl font-bold text-gray-700">Housie / Tambola Simulator</h1>
+            <p class="text-gray-500 mt-2">Generate a ticket, draw numbers, and play the classic game!</p>
+        </header>
+
+        <main class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            
+            <div class="lg:col-span-1 bg-white p-6 rounded-2xl shadow-lg">
+                <h2 class="text-2xl font-bold mb-4 text-center">Game Controls</h2>
+                
+                <div class="flex flex-col space-y-4">
+                    <button id="newGameBtn" class="w-full bg-blue-500 hover:bg-blue-600 text-white font-bold py-3 px-4 rounded-lg transition duration-300 shadow-md">New Game</button>
+                    <button id="nextNumberBtn" class="w-full bg-green-500 hover:bg-green-600 text-white font-bold py-3 px-4 rounded-lg transition duration-300 shadow-md" disabled>Next Number</button>
+                </div>
+
+                <div class="text-center mt-8 p-6 bg-gray-50 rounded-lg">
+                    <p class="text-gray-500 text-lg">Current Number</p>
+                    <div id="currentNumber" class="text-7xl font-bold text-blue-500 h-24 flex items-center justify-center">--</div>
+                </div>
+
+                <div id="gameStatus" class="mt-6 text-center text-lg font-semibold text-gray-600 h-10 flex items-center justify-center">Start a new game!</div>
+            </div>
+
+            <div class="lg:col-span-2 bg-white p-6 rounded-2xl shadow-lg">
+                <h2 class="text-2xl font-bold mb-4 text-center">Your Housie Ticket</h2>
+                <div id="ticketContainer" class="overflow-x-auto">
+                    <table class="w-full border-2 border-gray-300">
+                        <tbody id="ticketBody">
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+        </main>
+
+        <section class="mt-8 grid grid-cols-1 md:grid-cols-2 gap-8">
+            <div class="bg-white p-6 rounded-2xl shadow-lg">
+                <h3 class="text-2xl font-bold mb-4 text-center">Numbers Board (1-90)</h3>
+                <div id="numbersBoard" class="grid grid-cols-10 gap-1 text-center">
+                </div>
+            </div>
+
+            <div class="bg-white p-6 rounded-2xl shadow-lg">
+                <h3 class="text-2xl font-bold mb-4 text-center">Winning Patterns (Dividends)</h3>
+                <p class="text-gray-500 text-center mb-4">The game automatically checks for these wins. Claimed prizes will be highlighted below.</p>
+                <div id="prizesContainer" class="grid grid-cols-2 sm:grid-cols-3 gap-4 text-center">
+                </div>
+            </div>
+        </section>
+    </div>
+
+    <script>
+        const newGameBtn = document.getElementById('newGameBtn');
+        const nextNumberBtn = document.getElementById('nextNumberBtn');
+        const currentNumberDisplay = document.getElementById('currentNumber');
+        const gameStatus = document.getElementById('gameStatus');
+        const ticketBody = document.getElementById('ticketBody');
+        const numbersBoard = document.getElementById('numbersBoard');
+        const prizesContainer = document.getElementById('prizesContainer');
+
+        let state = {};
+
+        const PRIZES = {
+            'early-5': { name: 'Early Five', claimed: false },
+            'top-line': { name: 'Top Line', claimed: false },
+            'middle-line': { name: 'Middle Line', claimed: false },
+            'bottom-line': { name: 'Bottom Line', claimed: false },
+            'corners': { name: 'Four Corners', claimed: false },
+            'full-house': { name: 'Full House', claimed: false },
+        };
+
+        function initializeGame() {
+            state = {
+                availableNumbers: Array.from({ length: 90 }, (_, i) => i + 1),
+                calledNumbers: new Set(),
+                ticket: generateTicket(),
+                markedNumbers: new Set(),
+                gameActive: true,
+                prizes: JSON.parse(JSON.stringify(PRIZES)),
+            };
+            
+            renderBoard();
+            renderTicket();
+            renderPrizes();
+            
+            currentNumberDisplay.textContent = '--';
+            gameStatus.textContent = 'Click "Next Number" to begin!';
+            nextNumberBtn.disabled = false;
+        }
+        
+        function generateTicket() {
+            let ticket = Array.from({ length: 3 }, () => Array(9).fill(null));
+            let numbers = [];
+
+            for (let i = 0; i < 9; i++) {
+                const start = i * 10 + (i === 0 ? 1 : 0);
+                const end = i * 10 + (i === 8 ? 10 : 9);
+                const colNumbers = [];
+                for (let j = start; j <= end; j++) {
+                    colNumbers.push(j);
+                }
+                
+                const numsInCol = Math.random() < 0.3 ? 2 : 1; 
+                for (let k = 0; k < numsInCol; k++) {
+                    const randIndex = Math.floor(Math.random() * colNumbers.length);
+                    numbers.push(colNumbers.splice(randIndex, 1)[0]);
+                }
+            }
+            
+            while (numbers.length < 15) {
+                const randomNum = Math.floor(Math.random() * 90) + 1;
+                if (!numbers.includes(randomNum)) {
+                    const colIndex = Math.floor((randomNum - 1) / 10);
+                    const numsInCol = numbers.filter(n => Math.floor((n-1)/10) === colIndex).length;
+                    if(numsInCol < 2) {
+                       numbers.push(randomNum);
+                    }
+                }
+            }
+
+            numbers.sort((a, b) => a - b);
+            
+            for(let i=0; i < 3; i++) {
+                let rowNumbers = [];
+                while(rowNumbers.length < 5) {
+                    if (numbers.length === 0) break;
+                    const num = numbers.shift();
+                    const colIndex = Math.floor((num-1)/10);
+                    if(ticket[0][colIndex] === null && ticket[1][colIndex] === null && ticket[2][colIndex] === null) {
+                         rowNumbers.push(num);
+                    } else {
+                        numbers.push(num);
+                        numbers.sort((a,b) => a-b);
+                        const fallbackNum = numbers.shift();
+                        rowNumbers.push(fallbackNum);
+                    }
+                }
+                rowNumbers.forEach(num => {
+                    const colIndex = Math.floor((num-1)/10);
+                    ticket[i][colIndex] = num;
+                });
+            }
+
+            return ticket;
+        }
+
+        function renderTicket() {
+            ticketBody.innerHTML = '';
+            state.ticket.forEach((row, rowIndex) => {
+                const tr = document.createElement('tr');
+                row.forEach((num, colIndex) => {
+                    const td = document.createElement('td');
+                    td.className = 'ticket-cell w-1/9 h-16 md:h-20 border border-gray-200 text-center font-bold text-xl md:text-2xl cursor-pointer';
+                    if (num) {
+                        td.textContent = num;
+                        td.dataset.number = num;
+                        if (state.markedNumbers.has(num)) {
+                            td.classList.add('marked');
+                        }
+                    } else {
+                        td.style.cursor = 'default';
+                    }
+                    tr.appendChild(td);
+                });
+                ticketBody.appendChild(tr);
+            });
+        }
+
+        function renderBoard() {
+            numbersBoard.innerHTML = '';
+            for (let i = 1; i <= 90; i++) {
+                const cell = document.createElement('div');
+                cell.className = 'board-cell p-1 rounded-md border text-sm md:text-base';
+                cell.textContent = i;
+                cell.id = `board-num-${i}`;
+                if (state.calledNumbers.has(i)) {
+                    cell.classList.add('called');
+                }
+                numbersBoard.appendChild(cell);
+            }
+        }
+        
+        function renderPrizes() {
+            prizesContainer.innerHTML = '';
+            for (const key in state.prizes) {
+                const prize = state.prizes[key];
+                const div = document.createElement('div');
+                div.id = `prize-${key}`;
+                div.className = 'p-3 font-semibold rounded-lg border border-gray-200';
+                div.textContent = prize.name;
+                if (prize.claimed) {
+                    div.classList.add('claimed-prize');
+                }
+                prizesContainer.appendChild(div);
+            }
+        }
+
+        function drawNumber() {
+            if (!state.gameActive || state.availableNumbers.length === 0) {
+                return;
+            }
+
+            const randIndex = Math.floor(Math.random() * state.availableNumbers.length);
+            const number = state.availableNumbers.splice(randIndex, 1)[0];
+
+            state.calledNumbers.add(number);
+            currentNumberDisplay.textContent = number;
+            gameStatus.textContent = `Number ${number} called!`;
+            
+            const boardCell = document.getElementById(`board-num-${number}`);
+            if (boardCell) {
+                boardCell.classList.add('called');
+            }
+
+            const ticketCell = ticketBody.querySelector(`[data-number='${number}']`);
+            if (ticketCell) {
+                ticketCell.classList.add('bg-yellow-200');
+            }
+        }
+
+        function handleTicketClick(e) {
+            if (e.target.dataset.number) {
+                const num = parseInt(e.target.dataset.number, 10);
+                if (state.calledNumbers.has(num) && !state.markedNumbers.has(num)) {
+                    state.markedNumbers.add(num);
+                    e.target.classList.add('marked');
+                    e.target.classList.remove('bg-yellow-200');
+                    checkPrizes();
+                }
+            }
+        }
+
+        function checkPrizes() {
+            if (!state.prizes['early-5'].claimed && state.markedNumbers.size === 5) {
+                claimPrize('early-5');
+            }
+            
+            const rows = state.ticket;
+            const markedInRow = [0,0,0];
+            rows.forEach((row, i) => {
+                row.forEach(num => {
+                    if(num && state.markedNumbers.has(num)) {
+                        markedInRow[i]++;
+                    }
+                });
+            });
+
+            if(!state.prizes['top-line'].claimed && markedInRow[0] === 5) claimPrize('top-line');
+            if(!state.prizes['middle-line'].claimed && markedInRow[1] === 5) claimPrize('middle-line');
+            if(!state.prizes['bottom-line'].claimed && markedInRow[2] === 5) claimPrize('bottom-line');
+
+            if (!state.prizes['corners'].claimed) {
+                const topLeft = rows[0].find(n => n !== null);
+                const topRight = [...rows[0]].reverse().find(n => n !== null);
+                const bottomLeft = rows[2].find(n => n !== null);
+                const bottomRight = [...rows[2]].reverse().find(n => n !== null);
+                if (state.markedNumbers.has(topLeft) && state.markedNumbers.has(topRight) && state.markedNumbers.has(bottomLeft) && state.markedNumbers.has(bottomRight)) {
+                    claimPrize('corners');
+                }
+            }
+
+            if (!state.prizes['full-house'].claimed && state.markedNumbers.size === 15) {
+                claimPrize('full-house');
+                gameStatus.textContent = 'Full House! Game Over!';
+                nextNumberBtn.disabled = true;
+                state.gameActive = false;
+            }
+        }
+        
+        function claimPrize(prizeKey) {
+            state.prizes[prizeKey].claimed = true;
+            const prizeElement = document.getElementById(`prize-${prizeKey}`);
+            if (prizeElement) {
+                prizeElement.classList.add('claimed-prize');
+            }
+            gameStatus.textContent = `${state.prizes[prizeKey].name} claimed!`;
+        }
+
+        newGameBtn.addEventListener('click', initializeGame);
+        nextNumberBtn.addEventListener('click', drawNumber);
+        ticketBody.addEventListener('click', handleTicketClick);
+
+        initializeGame();
+        gameStatus.textContent = 'Start a new game!';
+        nextNumberBtn.disabled = true;
+
+    </script>
+</body>
+</html>
