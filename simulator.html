@@ -44,7 +44,7 @@
     <div class="container mx-auto p-4 md:p-8 max-w-7xl">
         <header class="text-center mb-8">
             <h1 class="text-4xl md:text-5xl font-bold text-gray-700">Housie / Tambola Simulator</h1>
-            <p class="text-gray-500 mt-2">Generate a ticket, draw numbers, and play the classic game!</p>
+            <p class="text-gray-500 mt-2">Generate a valid ticket, draw numbers, and play the classic game!</p>
         </header>
 
         <main class="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -117,7 +117,7 @@
             state = {
                 availableNumbers: Array.from({ length: 90 }, (_, i) => i + 1),
                 calledNumbers: new Set(),
-                ticket: generateTicket(),
+                ticket: generateValidTicket(),
                 markedNumbers: new Set(),
                 gameActive: true,
                 prizes: JSON.parse(JSON.stringify(PRIZES)),
@@ -132,61 +132,60 @@
             nextNumberBtn.disabled = false;
         }
         
-        function generateTicket() {
-            let ticket = Array.from({ length: 3 }, () => Array(9).fill(null));
-            let numbers = [];
-
-            for (let i = 0; i < 9; i++) {
-                const start = i * 10 + (i === 0 ? 1 : 0);
-                const end = i * 10 + (i === 8 ? 10 : 9);
-                const colNumbers = [];
-                for (let j = start; j <= end; j++) {
-                    colNumbers.push(j);
-                }
-                
-                const numsInCol = Math.random() < 0.3 ? 2 : 1; 
-                for (let k = 0; k < numsInCol; k++) {
-                    const randIndex = Math.floor(Math.random() * colNumbers.length);
-                    numbers.push(colNumbers.splice(randIndex, 1)[0]);
-                }
+        function generateValidTicket() {
+            let ticket = null;
+            while (ticket === null) {
+                ticket = attemptTicketGeneration();
             }
-            
-            while (numbers.length < 15) {
-                const randomNum = Math.floor(Math.random() * 90) + 1;
-                if (!numbers.includes(randomNum)) {
-                    const colIndex = Math.floor((randomNum - 1) / 10);
-                    const numsInCol = numbers.filter(n => Math.floor((n-1)/10) === colIndex).length;
-                    if(numsInCol < 2) {
-                       numbers.push(randomNum);
-                    }
-                }
-            }
-
-            numbers.sort((a, b) => a - b);
-            
-            for(let i=0; i < 3; i++) {
-                let rowNumbers = [];
-                while(rowNumbers.length < 5) {
-                    if (numbers.length === 0) break;
-                    const num = numbers.shift();
-                    const colIndex = Math.floor((num-1)/10);
-                    if(ticket[0][colIndex] === null && ticket[1][colIndex] === null && ticket[2][colIndex] === null) {
-                         rowNumbers.push(num);
-                    } else {
-                        numbers.push(num);
-                        numbers.sort((a,b) => a-b);
-                        const fallbackNum = numbers.shift();
-                        rowNumbers.push(fallbackNum);
-                    }
-                }
-                rowNumbers.forEach(num => {
-                    const colIndex = Math.floor((num-1)/10);
-                    ticket[i][colIndex] = num;
-                });
-            }
-
             return ticket;
         }
+        
+        function attemptTicketGeneration() {
+            const ticket = Array.from({ length: 3 }, () => Array(9).fill(null));
+            const rowCounts = [0, 0, 0];
+            const colCounts = Array(9).fill(0);
+
+            let positions = [];
+            for(let r=0; r<3; r++) {
+                for(let c=0; c<9; c++) {
+                    positions.push({r, c});
+                }
+            }
+            
+            positions.sort(() => Math.random() - 0.5); 
+            const selectedPositions = positions.slice(0, 15);
+
+            selectedPositions.forEach(p => {
+                rowCounts[p.r]++;
+                colCounts[p.c]++;
+            });
+
+            if (rowCounts.some(c => c !== 5)) return null;
+            if (colCounts.some(c => c === 0)) return null;
+
+            for (let c = 0; c < 9; c++) {
+                const numInCol = colCounts[c];
+                if (numInCol > 0) {
+                    const rangeStart = c * 10 + (c === 0 ? 1 : 0);
+                    const rangeEnd = c * 10 + 9;
+                    const numbersPool = [];
+                    for (let i = rangeStart; i <= rangeEnd; i++) {
+                        if (i > 0 && i <= 90) numbersPool.push(i);
+                    }
+                    numbersPool.sort(() => Math.random() - 0.5);
+
+                    const numbersToPlace = numbersPool.slice(0, numInCol).sort((a,b) => a-b);
+                    
+                    const rowsForThisCol = selectedPositions.filter(p => p.c === c).map(p => p.r).sort((a,b) => a-b);
+                    
+                    rowsForThisCol.forEach((r, idx) => {
+                        ticket[r][c] = numbersToPlace[idx];
+                    });
+                }
+            }
+            return ticket;
+        }
+
 
         function renderTicket() {
             ticketBody.innerHTML = '';
@@ -275,7 +274,7 @@
         }
 
         function checkPrizes() {
-            if (!state.prizes['early-5'].claimed && state.markedNumbers.size === 5) {
+            if (!state.prizes['early-5'].claimed && state.markedNumbers.size >= 5) {
                 claimPrize('early-5');
             }
             
@@ -312,6 +311,7 @@
         }
         
         function claimPrize(prizeKey) {
+            if (state.prizes[prizeKey].claimed) return;
             state.prizes[prizeKey].claimed = true;
             const prizeElement = document.getElementById(`prize-${prizeKey}`);
             if (prizeElement) {
@@ -331,3 +331,4 @@
     </script>
 </body>
 </html>
+
